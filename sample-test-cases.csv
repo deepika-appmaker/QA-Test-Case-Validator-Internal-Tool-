@@ -1,0 +1,16 @@
+Test Case ID,Description,Expected Result,Priority,Module
+TC001,Verify user can login with valid email and password,User is redirected to the dashboard page with a welcome message displayed,High,Authentication
+TC002,Check login fails with incorrect password,Error message "Invalid credentials" is displayed below the password field,High,Authentication
+TC003,Validate password reset email is sent,User receives a password reset email within 2 minutes,Medium,Authentication
+TC004,Test login page loads,Login page loads properly,Low,Authentication
+TC005,Verify user can navigate to the registration page from login,Registration page is displayed with all required fields visible,Medium,Authentication
+TC006,Confirm user can add items to shopping cart by clicking Add button,Cart icon shows updated item count and item appears in cart dropdown,High,Shopping Cart
+TC007,Check cart total updates when quantity is changed,Cart total recalculates and displays the correct amount within 1 second,High,Shopping Cart
+TC008,Works fine on mobile,App is responsive,Low,General
+TC009,Verify user can apply a valid discount code at checkout,Discount amount is deducted from the total and a success message "Coupon applied" is shown,High,Checkout
+TC010,Validate that the search bar returns relevant results for a product keyword,Search results page displays products matching the keyword with product names highlighted,Medium,Search
+TC011,Verify search works,Search works correctly,Low,Search
+TC012,Confirm user can sort search results by price low to high,Products are reordered with the lowest price item displayed first,Medium,Search
+TC013,Open the settings page and verify all preference toggles are functional,Each toggle switches between ON/OFF state and the preference is saved after page reload,Medium,Settings
+TC014,Validate that the user can upload a profile picture in JPG format under 2MB,Profile picture is updated and displayed in the header within 3 seconds,Medium,Profile
+TC015,Test logout functionality by clicking the Sign Out button,User session is terminated and user is redirected to the login page,High,Authentication
