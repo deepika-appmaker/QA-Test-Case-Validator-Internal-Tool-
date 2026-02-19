@@ -9,55 +9,71 @@ const AI_MODEL_FALLBACK = process.env.AI_MODEL_FALLBACK || 'gemini-2.0-flash';
 
 export { AI_API_KEY, AI_MODEL_PRIMARY, AI_MODEL_FALLBACK };
 
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 3000; // 3 seconds base delay for retry
+
 /**
  * Call Google Gemini API with the given model, system prompt, and user prompt.
- * Returns the raw text content from the response.
+ * Includes automatic retry with exponential backoff for rate-limit (429) errors.
  */
 export async function callGeminiAI(
     model: string,
     systemPrompt: string,
     userPrompt: string
 ): Promise<string> {
-    // Build the Gemini endpoint URL
-    // Format: {baseUrl}{model}:generateContent?key={apiKey}
     const baseUrl = AI_API_URL.endsWith('/') ? AI_API_URL : `${AI_API_URL}/`;
     const url = `${baseUrl}${model}:generateContent?key=${AI_API_KEY}`;
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            systemInstruction: {
-                parts: [{ text: systemPrompt }],
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
             },
-            contents: [
-                {
-                    role: 'user',
-                    parts: [{ text: userPrompt }],
+            body: JSON.stringify({
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }],
                 },
-            ],
-            generationConfig: {
-                temperature: 0.2,
-                responseMimeType: 'application/json',
-            },
-        }),
-    });
+                contents: [
+                    {
+                        role: 'user',
+                        parts: [{ text: userPrompt }],
+                    },
+                ],
+                generationConfig: {
+                    temperature: 0.2,
+                    responseMimeType: 'application/json',
+                },
+            }),
+        });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Gemini API error (${response.status}): ${errorText}`);
+        // Retry on rate-limit or transient server errors
+        if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES) {
+            const delay = BASE_DELAY_MS * Math.pow(2, attempt); // 3s, 6s, 12s
+            console.warn(`Gemini API ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+            await sleep(delay);
+            continue;
+        }
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Gemini API error (${response.status}): ${errorText}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (!text) {
+            throw new Error('Empty response from Gemini API');
+        }
+        return text;
     }
 
-    const data = await response.json();
+    throw new Error('Gemini API: max retries exceeded');
+}
 
-    // Extract text from Gemini response format
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (!text) {
-        throw new Error('Empty response from Gemini API');
-    }
-    return text;
+/** Sleep helper */
+export function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

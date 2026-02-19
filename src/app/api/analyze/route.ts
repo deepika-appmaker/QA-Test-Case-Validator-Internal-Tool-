@@ -5,10 +5,12 @@ import {
     buildBulkReviewPrompt,
     buildRewritePrompt,
 } from '@/lib/ai-prompts';
-import { callGeminiAI, parseAIJSON, AI_API_KEY, AI_MODEL_PRIMARY, AI_MODEL_FALLBACK } from '@/lib/gemini';
+import { callGeminiAI, parseAIJSON, AI_API_KEY, AI_MODEL_PRIMARY, AI_MODEL_FALLBACK, sleep } from '@/lib/gemini';
 import type { TestCase, AIReviewResult, AIRewriteResult } from '@/types';
 
 const BATCH_SIZE = 12;
+const BATCH_DELAY_MS = 3000; // 3s between batches
+const REWRITE_DELAY_MS = 2000; // 2s between rewrite calls
 
 /**
  * POST /api/analyze
@@ -42,7 +44,8 @@ export async function POST(request: NextRequest) {
         // Process all batches
         const allResults: AIReviewResult[] = [];
 
-        for (const batch of batches) {
+        for (let b = 0; b < batches.length; b++) {
+            const batch = batches[b];
             const userPrompt = buildBulkReviewPrompt(batch);
 
             let results: AIReviewResult[];
@@ -50,44 +53,51 @@ export async function POST(request: NextRequest) {
                 const raw = await callGeminiAI(AI_MODEL_PRIMARY, SYSTEM_PROMPT_BULK_REVIEW, userPrompt);
                 results = parseAIJSON<AIReviewResult[]>(raw);
             } catch (error) {
-                // Retry once with the same model
-                try {
-                    const raw = await callGeminiAI(AI_MODEL_PRIMARY, SYSTEM_PROMPT_BULK_REVIEW, userPrompt);
-                    results = parseAIJSON<AIReviewResult[]>(raw);
-                } catch {
-                    // Return error results for this batch
-                    results = batch.map((tc) => ({
-                        testId: tc.testId,
-                        status: 'ERROR' as const,
-                        score: 0,
-                        reason: `AI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                        confidence: 0,
-                    }));
-                }
+                // Return error results for this batch
+                results = batch.map((tc) => ({
+                    testId: tc.testId,
+                    status: 'ERROR' as const,
+                    score: 0,
+                    reason: `AI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    confidence: 0,
+                }));
             }
 
             allResults.push(...results);
+
+            // Delay between batches to avoid rate limits
+            if (b < batches.length - 1) {
+                await sleep(BATCH_DELAY_MS);
+            }
         }
 
         // Check for low confidence results → trigger rewrite with fallback model
         const rewriteResults: AIRewriteResult[] = [];
 
-        for (const result of allResults) {
-            if (result.confidence < 70 && result.status !== 'ERROR') {
-                const originalTC = testCases.find((tc) => tc.testId === result.testId);
-                if (originalTC) {
-                    try {
-                        const rewritePrompt = buildRewritePrompt(originalTC);
-                        const raw = await callGeminiAI(
-                            AI_MODEL_FALLBACK,
-                            SYSTEM_PROMPT_REWRITE,
-                            rewritePrompt
-                        );
-                        const rewrite = parseAIJSON<AIRewriteResult>(raw);
-                        rewriteResults.push(rewrite);
-                    } catch (error) {
-                        console.error(`Rewrite failed for ${result.testId}:`, error);
-                    }
+        const rewriteCandidates = allResults.filter(
+            (r) => r.confidence < 70 && r.status !== 'ERROR'
+        );
+
+        for (let i = 0; i < rewriteCandidates.length; i++) {
+            const result = rewriteCandidates[i];
+            const originalTC = testCases.find((tc) => tc.testId === result.testId);
+            if (originalTC) {
+                try {
+                    const rewritePrompt = buildRewritePrompt(originalTC);
+                    const raw = await callGeminiAI(
+                        AI_MODEL_FALLBACK,
+                        SYSTEM_PROMPT_REWRITE,
+                        rewritePrompt
+                    );
+                    const rewrite = parseAIJSON<AIRewriteResult>(raw);
+                    rewriteResults.push(rewrite);
+                } catch (error) {
+                    console.error(`Rewrite failed for ${result.testId}:`, error);
+                }
+
+                // Delay between rewrite calls
+                if (i < rewriteCandidates.length - 1) {
+                    await sleep(REWRITE_DELAY_MS);
                 }
             }
         }

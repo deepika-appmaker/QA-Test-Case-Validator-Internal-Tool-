@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import type { TestCase, CSVParseResult } from '@/types';
+import type { TestCase, CSVParseResult, CellIssue } from '@/types';
 
 // Base fields that we map from CSV headers
 type CSVMappableField = 'testId' | 'description' | 'expectedResult' | 'priority' | 'module';
@@ -42,10 +42,10 @@ const HEADER_MAP: Record<string, CSVMappableField> = {
     'area': 'module',
 };
 
-const MANDATORY_FIELDS: CSVMappableField[] = ['testId', 'description'];
+const MANDATORY_FIELDS: CSVMappableField[] = ['testId', 'description', 'expectedResult', 'priority'];
 
 /**
- * Parse a CSV file and return normalized test case rows.
+ * Parse a CSV file and return normalized test case rows with cell-level issues.
  */
 export function parseCSV(file: File): Promise<CSVParseResult> {
     return new Promise((resolve) => {
@@ -56,9 +56,19 @@ export function parseCSV(file: File): Promise<CSVParseResult> {
             complete: (results) => {
                 const errors: string[] = [];
                 const warnings: string[] = [];
+                const cellIssues: CellIssue[] = [];
+
+                // Raw data for preview
+                const rawHeaders = results.meta.fields || [];
+                const rawRows = (results.data as Record<string, string>[]).map((row) => {
+                    const clean: Record<string, string> = {};
+                    for (const h of rawHeaders) {
+                        clean[h] = row[h] ?? '';
+                    }
+                    return clean;
+                });
 
                 // Normalize headers
-                const rawHeaders = results.meta.fields || [];
                 const headerMapping = new Map<string, CSVMappableField>();
 
                 for (const raw of rawHeaders) {
@@ -80,51 +90,102 @@ export function parseCSV(file: File): Promise<CSVParseResult> {
                 }
 
                 if (errors.length > 0) {
-                    resolve({ rows: [], errors, warnings });
+                    resolve({ rows: [], errors, warnings, rawHeaders, rawRows, cellIssues });
                     return;
                 }
 
-                // Transform rows
-                const rows: TestCase[] = (results.data as Record<string, string>[]).map(
-                    (row, index) => {
-                        const tc: TestCase = {
-                            testId: '',
-                            description: '',
-                            expectedResult: '',
-                            priority: '',
-                            module: '',
-                            aiStatus: 'PENDING',
-                        };
+                // Find the raw header names for mandatory/optional fields
+                const fieldToHeader = new Map<CSVMappableField, string>();
+                for (const [raw, field] of headerMapping.entries()) {
+                    fieldToHeader.set(field, raw);
+                }
 
-                        for (const [rawHeader, field] of headerMapping.entries()) {
-                            const value = row[rawHeader]?.trim() || '';
-                            tc[field] = value;
-                        }
+                // Transform rows & generate cell-level issues
+                const rows: TestCase[] = rawRows.map((row, index) => {
+                    const tc: TestCase = {
+                        testId: '',
+                        description: '',
+                        expectedResult: '',
+                        priority: '',
+                        module: '',
+                        aiStatus: 'PENDING',
+                    };
 
-                        // Auto-generate test ID if missing
-                        if (!tc.testId) {
-                            tc.testId = `TC${String(index + 1).padStart(3, '0')}`;
-                            warnings.push(`Row ${index + 1}: Missing Test Case ID, auto-generated as "${tc.testId}".`);
-                        }
-
-                        return tc;
+                    for (const [rawHeader, field] of headerMapping.entries()) {
+                        const value = row[rawHeader]?.trim() || '';
+                        tc[field] = value;
                     }
-                );
+
+                    // Cell-level validation
+                    const testIdHeader = fieldToHeader.get('testId');
+                    const descHeader = fieldToHeader.get('description');
+                    const expectedHeader = fieldToHeader.get('expectedResult');
+                    const priorityHeader = fieldToHeader.get('priority');
+
+                    // Missing Test ID
+                    if (!tc.testId && testIdHeader) {
+                        tc.testId = `TC${String(index + 1).padStart(3, '0')}`;
+                        cellIssues.push({
+                            row: index,
+                            column: testIdHeader,
+                            type: 'warning',
+                            message: `Empty — auto-generated as "${tc.testId}"`,
+                        });
+                        warnings.push(`Row ${index + 1}: Missing Test Case ID, auto-generated as "${tc.testId}".`);
+                    }
+
+                    // Empty description
+                    if (!tc.description && descHeader) {
+                        cellIssues.push({
+                            row: index,
+                            column: descHeader,
+                            type: 'error',
+                            message: 'Description is empty',
+                        });
+                    }
+
+                    // Empty expected result
+                    if (!tc.expectedResult && expectedHeader) {
+                        cellIssues.push({
+                            row: index,
+                            column: expectedHeader,
+                            type: 'error',
+                            message: 'Expected result is empty',
+                        });
+                    }
+
+                    // Empty priority
+                    if (!tc.priority && priorityHeader) {
+                        cellIssues.push({
+                            row: index,
+                            column: priorityHeader,
+                            type: 'error',
+                            message: 'Priority is empty',
+                        });
+                    }
+
+
+
+                    return tc;
+                });
 
                 // Row count validation
                 if (rows.length > 500) {
                     errors.push(`File contains ${rows.length} rows. Maximum allowed is 500.`);
-                    resolve({ rows: [], errors, warnings });
+                    resolve({ rows: [], errors, warnings, rawHeaders, rawRows: rawRows.slice(0, 20), cellIssues });
                     return;
                 }
 
-                resolve({ rows, errors, warnings });
+                resolve({ rows, errors, warnings, rawHeaders, rawRows, cellIssues });
             },
             error: (error: Error) => {
                 resolve({
                     rows: [],
                     errors: [`CSV parsing failed: ${error.message}`],
                     warnings: [],
+                    rawHeaders: [],
+                    rawRows: [],
+                    cellIssues: [],
                 });
             },
         });

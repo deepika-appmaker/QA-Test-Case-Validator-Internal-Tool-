@@ -39,7 +39,7 @@ export default function ModuleSummary({ summary, loading }: ModuleSummaryProps) 
                 Module Summary
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 {/* Average Score */}
                 <div className="rounded-lg bg-stone-50 p-4 border border-stone-200">
                     <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Avg Score</p>
@@ -58,14 +58,6 @@ export default function ModuleSummary({ summary, loading }: ModuleSummaryProps) 
                     <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Rewrite Rate</p>
                     <p className="text-2xl font-bold tabular-nums text-amber-600">
                         {summary.rewritePercentage.toFixed(1)}%
-                    </p>
-                </div>
-
-                {/* Automation Readiness */}
-                <div className="rounded-lg bg-stone-50 p-4 border border-stone-200">
-                    <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Automation Ready</p>
-                    <p className={`text-2xl font-bold ${readinessColor}`}>
-                        {summary.automationReadiness}
                     </p>
                 </div>
             </div>

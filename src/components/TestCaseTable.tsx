@@ -1,24 +1,29 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import type { TestCase, AIStatus } from '@/types';
 import StatusBadge from './StatusBadge';
 import ScoreBadge from './ScoreBadge';
 
+type SortDirection = 'asc' | 'desc' | null;
+type FilterType = 'all' | 'PASS' | 'NEEDS_REWRITE' | 'ERROR' | 'FLAGGED' | 'PENDING';
+
 interface TestCaseTableProps {
     testCases: TestCase[];
     onUpdateTestCase: (index: number, updates: Partial<TestCase>) => void;
-    onReAnalyze: (index: number) => void;
+    // onReAnalyze removed
     analyzing: boolean;
 }
 
 export default function TestCaseTable({
     testCases,
     onUpdateTestCase,
-    onReAnalyze,
+    // onReAnalyze removed
     analyzing,
 }: TestCaseTableProps) {
     const [expandedRow, setExpandedRow] = useState<number | null>(null);
+    const [scoreSort, setScoreSort] = useState<SortDirection>(null);
+    const [issueFilter, setIssueFilter] = useState<FilterType>('all');
 
     const handleCellEdit = useCallback(
         (index: number, field: keyof TestCase, value: string) => {
@@ -26,6 +31,58 @@ export default function TestCaseTable({
         },
         [onUpdateTestCase]
     );
+
+    // Apply filter + sort, keeping track of original indices
+    const displayData = useMemo(() => {
+        let items = testCases.map((tc, originalIndex) => ({ tc, originalIndex }));
+
+        // Filter
+        if (issueFilter !== 'all') {
+            if (issueFilter === 'FLAGGED') {
+                items = items.filter(({ tc }) => tc.localFlags && tc.localFlags.length > 0);
+            } else {
+                items = items.filter(({ tc }) => (tc.aiStatus || 'PENDING') === issueFilter);
+            }
+        }
+
+        // Sort by score
+        if (scoreSort) {
+            items.sort((a, b) => {
+                const sa = a.tc.score ?? -1;
+                const sb = b.tc.score ?? -1;
+                return scoreSort === 'asc' ? sa - sb : sb - sa;
+            });
+        }
+
+        return items;
+    }, [testCases, issueFilter, scoreSort]);
+
+    const handleExportCSV = () => {
+        const headers = ['Test ID', 'Description', 'Expected Result', 'Priority', 'Module', 'AI Status', 'Score', 'Comment', 'Local Flags', 'Rewritten Description', 'Rewritten Expected', 'Improvement Reason'];
+        const rows = testCases.map((tc) => [
+            tc.testId,
+            `"${(tc.description || '').replace(/"/g, '""')}"`,
+            `"${(tc.expectedResult || '').replace(/"/g, '""')}"`,
+            tc.priority || '',
+            tc.module || '',
+            tc.aiStatus || 'PENDING',
+            tc.score?.toString() || '',
+            `"${(tc.comment || '').replace(/"/g, '""')}"`,
+            `"${(tc.localFlags || []).join('; ')}"`,
+            `"${(tc.rewrittenDescription || '').replace(/"/g, '""')}"`,
+            `"${(tc.rewrittenExpected || '').replace(/"/g, '""')}"`,
+            `"${(tc.improvementReason || '').replace(/"/g, '""')}"`,
+        ].join(','));
+
+        const csv = [headers.join(','), ...rows].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `qa-review-results-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
     if (testCases.length === 0) {
         return (
@@ -37,56 +94,103 @@ export default function TestCaseTable({
     }
 
     return (
-        <div className="w-full overflow-x-auto rounded-xl border border-stone-200 bg-white shadow-sm">
-            <table className="w-full text-sm">
-                <thead>
-                    <tr className="border-b border-stone-200 bg-stone-50">
-                        <th className="text-left px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider whitespace-nowrap">
-                            ID
-                        </th>
-                        <th className="text-left px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider min-w-[250px]">
-                            Description
-                        </th>
-                        <th className="text-left px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider min-w-[200px]">
-                            Expected Result
-                        </th>
-                        <th className="text-left px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider whitespace-nowrap">
-                            Priority
-                        </th>
-                        <th className="text-left px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider whitespace-nowrap">
-                            Module
-                        </th>
-                        <th className="text-center px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider whitespace-nowrap">
-                            Status
-                        </th>
-                        <th className="text-center px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider whitespace-nowrap">
-                            Score
-                        </th>
-                        <th className="text-left px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider min-w-[200px]">
-                            Comment
-                        </th>
-                        <th className="text-center px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider whitespace-nowrap">
-                            Actions
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {testCases.map((tc, index) => (
-                        <TableRow
-                            key={tc.testId || index}
-                            testCase={tc}
-                            index={index}
-                            onEdit={handleCellEdit}
-                            onReAnalyze={onReAnalyze}
-                            analyzing={analyzing}
-                            isExpanded={expandedRow === index}
-                            onToggleExpand={() =>
-                                setExpandedRow(expandedRow === index ? null : index)
-                            }
-                        />
-                    ))}
-                </tbody>
-            </table>
+        <div className="space-y-3">
+            {/* Toolbar: Filter + Export */}
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                    <label className="text-xs text-stone-500 font-medium">Filter:</label>
+                    <select
+                        value={issueFilter}
+                        onChange={(e) => setIssueFilter(e.target.value as FilterType)}
+                        className="text-xs rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-stone-600 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400"
+                    >
+                        <option value="all">All ({testCases.length})</option>
+                        <option value="PASS">✓ Passed ({testCases.filter((tc) => tc.aiStatus === 'PASS').length})</option>
+                        <option value="NEEDS_REWRITE">✎ Needs Rewrite ({testCases.filter((tc) => tc.aiStatus === 'NEEDS_REWRITE').length})</option>
+                        <option value="ERROR">✕ Error ({testCases.filter((tc) => tc.aiStatus === 'ERROR').length})</option>
+                        <option value="PENDING">◌ Pending ({testCases.filter((tc) => !tc.aiStatus || tc.aiStatus === 'PENDING').length})</option>
+                        <option value="FLAGGED">⚠ Flagged ({testCases.filter((tc) => tc.localFlags && tc.localFlags.length > 0).length})</option>
+                    </select>
+                    {issueFilter !== 'all' && (
+                        <span className="text-xs text-stone-400">
+                            Showing {displayData.length} of {testCases.length}
+                        </span>
+                    )}
+                </div>
+
+                <button
+                    onClick={handleExportCSV}
+                    className="text-xs font-medium text-indigo-600 hover:text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-50 transition-all flex items-center gap-1.5"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                    Export CSV
+                </button>
+            </div>
+
+            {/* Table */}
+            <div className="w-full overflow-x-auto rounded-xl border border-stone-200 bg-white shadow-sm">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="border-b border-stone-200 bg-stone-50">
+                            <th className="text-left px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider whitespace-nowrap">
+                                ID
+                            </th>
+                            <th className="text-left px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider min-w-[250px]">
+                                Description
+                            </th>
+                            <th className="text-left px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider min-w-[200px]">
+                                Expected Result
+                            </th>
+                            <th className="text-left px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider whitespace-nowrap">
+                                Priority
+                            </th>
+                            <th className="text-left px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider whitespace-nowrap">
+                                Module
+                            </th>
+                            <th className="text-center px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider whitespace-nowrap">
+                                Status
+                            </th>
+                            {/* Score (Sortable) */}
+                            <th
+                                className="text-center px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-indigo-600 transition-colors select-none"
+                                onClick={() => {
+                                    setScoreSort(scoreSort === null ? 'desc' : scoreSort === 'desc' ? 'asc' : null);
+                                }}
+                            >
+                                <span className="inline-flex items-center gap-1">
+                                    Score
+                                    {scoreSort === 'desc' && <span className="text-indigo-500">↓</span>}
+                                    {scoreSort === 'asc' && <span className="text-indigo-500">↑</span>}
+                                    {scoreSort === null && <span className="text-stone-300">↕</span>}
+                                </span>
+                            </th>
+                            <th className="text-left px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider min-w-[200px]">
+                                Comment
+                            </th>
+                            <th className="text-center px-4 py-3 text-stone-500 font-medium text-xs uppercase tracking-wider whitespace-nowrap">
+                                Actions
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {displayData.map(({ tc, originalIndex }) => (
+                            <TableRow
+                                key={`${tc.testId}-${originalIndex}`}
+                                testCase={tc}
+                                index={originalIndex}
+                                onEdit={handleCellEdit}
+                                analyzing={analyzing}
+                                isExpanded={expandedRow === originalIndex}
+                                onToggleExpand={() =>
+                                    setExpandedRow(expandedRow === originalIndex ? null : originalIndex)
+                                }
+                            />
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 }
@@ -97,7 +201,7 @@ interface TableRowProps {
     testCase: TestCase;
     index: number;
     onEdit: (index: number, field: keyof TestCase, value: string) => void;
-    onReAnalyze: (index: number) => void;
+    // onReAnalyze removed
     analyzing: boolean;
     isExpanded: boolean;
     onToggleExpand: () => void;
@@ -107,12 +211,13 @@ function TableRow({
     testCase,
     index,
     onEdit,
-    onReAnalyze,
+    // onReAnalyze removed
     analyzing,
     isExpanded,
     onToggleExpand,
 }: TableRowProps) {
     const hasFlags = testCase.localFlags && testCase.localFlags.length > 0;
+    const hasAIDetails = testCase.comment || testCase.rewrittenDescription || hasFlags;
     const isRowAnalyzing = testCase.aiStatus === 'ANALYZING';
 
     return (
@@ -174,72 +279,88 @@ function TableRow({
                     <ScoreBadge score={testCase.score} />
                 </td>
 
-                {/* Comment */}
+                {/* Comment (truncated, click to expand) */}
                 <td className="px-4 py-3">
-                    <div className="text-stone-500 text-xs leading-relaxed">
-                        {testCase.comment || '—'}
+                    <div
+                        className="text-stone-500 text-xs leading-relaxed cursor-pointer hover:text-stone-700 transition-colors"
+                        onClick={hasAIDetails ? onToggleExpand : undefined}
+                        title={hasAIDetails ? 'Click to expand full details' : undefined}
+                    >
+                        {testCase.comment
+                            ? testCase.comment.length > 80
+                                ? testCase.comment.substring(0, 80) + '...'
+                                : testCase.comment
+                            : '—'}
                     </div>
                 </td>
 
                 {/* Actions */}
                 <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-2">
-                        {/* Expand / Flags */}
-                        {hasFlags && (
+                        {/* Expand Details */}
+                        {hasAIDetails && (
                             <button
                                 onClick={onToggleExpand}
-                                className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 transition-colors"
-                                title="View validation flags"
+                                className={`p-1.5 rounded-lg transition-colors ${isExpanded
+                                    ? 'text-indigo-600 bg-indigo-50'
+                                    : hasFlags
+                                        ? 'text-amber-600 hover:bg-amber-50'
+                                        : 'text-stone-400 hover:bg-stone-100'
+                                    }`}
+                                title={isExpanded ? 'Collapse details' : 'Expand details'}
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                                <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                                 </svg>
                             </button>
                         )}
 
-                        {/* Re-Analyze */}
-                        <button
-                            onClick={() => onReAnalyze(index)}
-                            disabled={analyzing || isRowAnalyzing}
-                            className={`
-                p-1.5 rounded-lg transition-all duration-200
-                ${analyzing || isRowAnalyzing
-                                    ? 'text-gray-600 cursor-not-allowed'
-                                    : 'text-stone-400 hover:bg-indigo-50 hover:text-indigo-600'
-                                }
-              `}
-                            title="Re-analyze this row"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" className={`w-4 h-4 ${isRowAnalyzing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
-                            </svg>
-                        </button>
+                        {/* Re-Analyze removed per requirement */}
                     </div>
                 </td>
             </tr>
 
-            {/* Expanded Flags Row */}
-            {isExpanded && hasFlags && (
-                <tr className="border-b border-stone-100 bg-amber-50/50">
-                    <td colSpan={9} className="px-6 py-3">
-                        <div className="flex flex-wrap gap-2">
-                            {testCase.localFlags!.map((flag, i) => (
-                                <span
-                                    key={i}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-amber-50 text-amber-700 border border-amber-200"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
-                                    </svg>
-                                    {flag}
-                                </span>
-                            ))}
+            {/* Expanded Details Row */}
+            {isExpanded && (
+                <tr className="border-b border-stone-100 bg-stone-50/50">
+                    <td colSpan={9} className="px-6 py-4">
+                        <div className="space-y-3">
+                            {/* Full AI Comment */}
+                            {testCase.comment && (
+                                <div className="p-3 rounded-lg bg-white border border-stone-200">
+                                    <p className="text-xs text-stone-500 font-medium mb-1">AI Review Comment</p>
+                                    <p className="text-xs text-stone-700 leading-relaxed whitespace-pre-wrap">{testCase.comment}</p>
+                                    {/* Confidence hidden */}
+                                </div>
+                            )}
+
+                            {/* Validation Flags */}
+                            {hasFlags && (
+                                <div className="flex flex-wrap gap-2">
+                                    {testCase.localFlags!.map((flag, i) => (
+                                        <span
+                                            key={i}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-amber-50 text-amber-700 border border-amber-200"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                                            </svg>
+                                            {flag}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* AI Suggested Rewrite */}
                             {testCase.rewrittenDescription && (
-                                <div className="w-full mt-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-                                    <p className="text-xs text-emerald-700 font-medium mb-1">AI Suggested Rewrite:</p>
+                                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                                    <p className="text-xs text-emerald-700 font-medium mb-1">AI Suggested Rewrite</p>
                                     <p className="text-xs text-gray-700"><strong>Description:</strong> {testCase.rewrittenDescription}</p>
                                     {testCase.rewrittenExpected && (
                                         <p className="text-xs text-gray-700 mt-1"><strong>Expected:</strong> {testCase.rewrittenExpected}</p>
+                                    )}
+                                    {testCase.improvementReason && (
+                                        <p className="text-xs text-stone-500 mt-2 italic">Reason: {testCase.improvementReason}</p>
                                     )}
                                 </div>
                             )}

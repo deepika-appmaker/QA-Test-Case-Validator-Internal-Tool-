@@ -1,36 +1,15 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# QA Test Case Validator
 
-## Getting Started
+An internal AI-powered tool that validates software test cases against SOP (Standard Operating Procedure) standards. Upload a CSV of test cases, run AI analysis, and get instant quality scores, improvement suggestions, and rewritten test cases.
 
-First, run the development server:
+## What It Does
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **CSV Upload & Parsing** — Upload test cases via CSV with columns for Test Case ID, Description, Expected Result, Priority, and Module.
+- **Local Rule Engine** — Automatically flags test cases with missing expected results, no action verbs, and near-duplicate descriptions.
+- **AI-Powered Analysis** — Uses Google Gemini to evaluate each test case for business logic correctness, SOP structure compliance, expected result clarity, and language precision. Returns a 0–100 quality score with reasoning.
+- **AI Rewrite Suggestions** — Automatically generates SOP-compliant rewrites for test cases that fail analysis.
+- **Module Summary** — Generates an AI-powered summary with average score, rewrite rate, automation readiness level, and top recurring issues.
+- **Per-Row Re-Analysis** — Re-analyze individual test cases after editing them inline.
+- **Google Sign-In** — Authenticated access via Firebase Auth (Google provider).
+
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

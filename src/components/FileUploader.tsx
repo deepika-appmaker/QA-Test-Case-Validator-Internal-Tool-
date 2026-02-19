@@ -7,11 +7,12 @@ import type { CSVParseResult } from '@/types';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 interface FileUploaderProps {
-    onParsed: (result: CSVParseResult) => void;
+    onParsed: (result: CSVParseResult, fileName: string) => void;
     disabled?: boolean;
+    compact?: boolean;
 }
 
-export default function FileUploader({ onParsed, disabled }: FileUploaderProps) {
+export default function FileUploader({ onParsed, disabled, compact = false }: FileUploaderProps) {
     const [dragActive, setDragActive] = useState(false);
     const [fileName, setFileName] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export default function FileUploader({ onParsed, disabled }: FileUploaderProps) 
 
             try {
                 const result = await parseCSV(file);
-                onParsed(result);
+                onParsed(result, file.name);
             } catch (err) {
                 setError(`Failed to parse CSV: ${err instanceof Error ? err.message : 'Unknown error'}`);
             } finally {
@@ -92,13 +93,14 @@ export default function FileUploader({ onParsed, disabled }: FileUploaderProps) 
                 onDragLeave={handleDragLeave}
                 onClick={() => !disabled && inputRef.current?.click()}
                 className={`
-          relative cursor-pointer rounded-2xl border-2 border-dashed p-12
+          relative cursor-pointer rounded-2xl border-2 border-dashed
           transition-all duration-300 ease-out
           ${dragActive
                         ? 'border-indigo-400 bg-indigo-50 scale-[1.02]'
                         : 'border-stone-300 bg-stone-50/50 hover:border-indigo-300 hover:bg-indigo-50/30'
                     }
           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+          ${compact ? 'p-6 flex items-center gap-6' : 'p-12'}
         `}
             >
                 <input
@@ -110,16 +112,17 @@ export default function FileUploader({ onParsed, disabled }: FileUploaderProps) 
                     disabled={disabled}
                 />
 
-                <div className="flex flex-col items-center gap-4 text-center">
+                <div className={`flex flex-col items-center gap-4 text-center ${compact ? 'flex-row text-left gap-6' : ''}`}>
                     {/* Upload Icon */}
                     <div className={`
-            w-16 h-16 rounded-2xl flex items-center justify-center
+            rounded-2xl flex items-center justify-center
             transition-all duration-300
             ${dragActive ? 'bg-indigo-100 text-indigo-600' : 'bg-stone-100 text-stone-400'}
+            ${compact ? 'w-12 h-12 shrink-0' : 'w-16 h-16'}
           `}>
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
-                            className="w-8 h-8"
+                            className={compact ? 'w-6 h-6' : 'w-8 h-8'}
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -133,31 +136,33 @@ export default function FileUploader({ onParsed, disabled }: FileUploaderProps) 
                         </svg>
                     </div>
 
-                    {parsing ? (
-                        <div className="flex items-center gap-3">
-                            <div className="w-5 h-5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
-                            <span className="text-stone-400">Parsing {fileName}...</span>
-                        </div>
-                    ) : (
-                        <>
-                            <div>
-                                <p className="text-stone-700 font-medium text-lg">
-                                    {dragActive ? 'Drop your CSV here' : 'Drag & drop your CSV file'}
-                                </p>
-                                <p className="text-stone-400 text-sm mt-1">
-                                    or click to browse • .csv only • 5MB max • 500 rows max
-                                </p>
+                    <div className="flex-1">
+                        {parsing ? (
+                            <div className="flex items-center gap-3">
+                                <div className="w-5 h-5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+                                <span className="text-stone-400">Parsing {fileName}...</span>
                             </div>
-                            {fileName && !error && (
-                                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-50 border border-indigo-200">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                                    </svg>
-                                    <span className="text-indigo-700 text-sm">{fileName}</span>
+                        ) : (
+                            <>
+                                <div>
+                                    <p className={`text-stone-700 font-medium ${compact ? 'text-base' : 'text-lg'}`}>
+                                        {dragActive ? 'Drop your CSV here' : (compact ? 'Upload a different file' : 'Drag & drop your CSV file')}
+                                    </p>
+                                    <p className="text-stone-400 text-sm mt-1">
+                                        {compact ? '.csv only • 5MB max' : 'or click to browse • .csv only • 5MB max • 500 rows max'}
+                                    </p>
                                 </div>
-                            )}
-                        </>
-                    )}
+                                {fileName && !error && (
+                                    <div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                        </svg>
+                                        <span className="text-indigo-700 text-sm truncate max-w-[200px]">{fileName}</span>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
