@@ -78,7 +78,7 @@ Requirements for rewritten test cases:
 
 Return ONLY valid JSON. No markdown, no commentary.`;
 
-export const SYSTEM_PROMPT_MODULE_SUMMARY = `You are a QA Lead generating a concise module quality summary.
+export const SYSTEM_PROMPT_MODULE_SUMMARY = `You are a QA Lead generating a quality module summary.
 
 Return ONLY valid JSON. No markdown, no commentary.`;
 
