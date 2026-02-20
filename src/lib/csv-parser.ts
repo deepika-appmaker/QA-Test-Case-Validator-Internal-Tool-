@@ -23,6 +23,9 @@ const HEADER_MAP: Record<string, CSVMappableField> = {
     'test scenario': 'description',
     'steps': 'description',
     'test steps': 'description',
+    'test descriptions': 'description',
+    'test case/test description': 'description',
+    'test case/test descriptions': 'description',
 
     'expected result': 'expectedResult',
     'expectedresult': 'expectedResult',
@@ -30,6 +33,7 @@ const HEADER_MAP: Record<string, CSVMappableField> = {
     'expected': 'expectedResult',
     'expected outcome': 'expectedResult',
     'expected behavior': 'expectedResult',
+    'expected results': 'expectedResult',
 
     'priority': 'priority',
     'prio': 'priority',

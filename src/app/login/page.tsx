@@ -16,7 +16,7 @@ export default function LoginPage() {
     // Redirect if already logged in
     useEffect(() => {
         if (!loading && user) {
-            router.push('/upload');
+            router.push('/');
         }
     }, [user, loading, router]);
 
@@ -25,7 +25,7 @@ export default function LoginPage() {
         setSigningIn(true);
         try {
             await signInWithGoogle();
-            router.push('/upload');
+            router.push('/');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to sign in');
         } finally {
