@@ -63,7 +63,7 @@ STATUS:
 
 OUTPUT:
 JSON only
-Reason: 1 -2 short lines summarizing issues only and a feedback comment.
+Reason: 1 -2 short lines summarizing issues only and a mandatory feedback comment.
 
 `;
 
