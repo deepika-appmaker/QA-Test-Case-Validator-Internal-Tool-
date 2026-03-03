@@ -17,7 +17,7 @@ import {
     saveAIResults,
     getFile
 } from '@/lib/firestore';
-import type { TestCase, AIReviewResult, AIRewriteResult, AIModuleSummary } from '@/types';
+import type { TestCase, AIReviewResult, AIRewriteResult, AIModuleSummary, SheetParseResult } from '@/types';
 
 export default function ResultsPage() {
     return (
@@ -49,6 +49,13 @@ function ResultsContent() {
     const [projectId, setProjectId] = useState<string>('default');
     const [fileId, setFileId] = useState<string | null>(null);
 
+    // XLSX multi-sheet state
+    const [xlsxSheets, setXlsxSheets] = useState<SheetParseResult[]>([]);
+    const [activeSheetIdx, setActiveSheetIdx] = useState(0);
+    const [sheetAnalyzed, setSheetAnalyzed] = useState<Record<number, boolean>>({});
+    const [sheetSummaries, setSheetSummaries] = useState<Record<number, AIModuleSummary | null>>({});
+    const isXLSX = xlsxSheets.length > 0;
+
     // Track saving state to prevent race conditions
     const isSaving = useRef(false);
 
@@ -75,8 +82,44 @@ function ResultsContent() {
         }
 
         // Mode B: New Upload (Session Storage)
-        const storedData = sessionStorage.getItem('qa-validator-data');
+        const fileType = sessionStorage.getItem('qa-file-type');
         const storedMeta = sessionStorage.getItem('qa-validator-meta');
+
+        // Mode B1: XLSX multi-sheet
+        if (fileType === 'xlsx' && storedMeta) {
+            try {
+                const meta = JSON.parse(storedMeta);
+                if (meta.projectId) setProjectId(meta.projectId);
+
+                const rawSheets = sessionStorage.getItem('qa-validator-xlsx-sheets');
+                if (rawSheets) {
+                    const sheets: SheetParseResult[] = JSON.parse(rawSheets);
+                    const validSheets = sheets.filter(s => s.parseResult.rows.length > 0);
+                    setXlsxSheets(validSheets);
+
+                    // Load first sheet
+                    if (validSheets.length > 0) {
+                        const firstRows = validateAllTestCases(validSheets[0].parseResult.rows);
+                        setTestCases(firstRows);
+                    }
+
+                    // Auto-save first sheet
+                    if (user && !sessionStorage.getItem('qa-file-saved') && !isSaving.current && validSheets.length > 0) {
+                        savePendingFile(validSheets[0].parseResult.rows, {
+                            ...meta,
+                            fileName: `${meta.fileName} - ${validSheets[0].sheetName}`,
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error('XLSX session load error:', err);
+                showToast('Failed to load XLSX session data', 'error');
+            }
+            return;
+        }
+
+        // Mode B2: CSV single sheet (unchanged)
+        const storedData = sessionStorage.getItem('qa-validator-data');
 
         if (storedData && storedMeta) {
             try {
@@ -319,6 +362,25 @@ function ResultsContent() {
 
     // handleReAnalyze removed per requirement
 
+    // ─── XLSX: Switch between sheets ───────────────────────────────
+    const switchSheet = useCallback((idx: number) => {
+        if (analyzing) return; // Don't allow switching while analyzing
+        // Save current sheet's analyzed state before switching
+        setSheetAnalyzed(prev => ({ ...prev, [activeSheetIdx]: analyzed }));
+        setSheetSummaries(prev => ({ ...prev, [activeSheetIdx]: moduleSummary }));
+
+        // Load new sheet
+        const sheet = xlsxSheets[idx];
+        if (!sheet) return;
+        setActiveSheetIdx(idx);
+        const rows = validateAllTestCases(sheet.parseResult.rows);
+        setTestCases(rows);
+        setAnalyzed(!!sheetAnalyzed[idx]);
+        setModuleSummary(sheetSummaries[idx] ?? null);
+        setFileId(null); // Reset fileId so the new sheet gets its own save
+        sessionStorage.removeItem('qa-file-saved');
+    }, [analyzing, analyzed, moduleSummary, activeSheetIdx, xlsxSheets, sheetAnalyzed, sheetSummaries]);
+
     // Stats
     const totalRows = testCases.length;
     const passedRows = testCases.filter((tc) => tc.aiStatus === 'PASS').length;
@@ -375,6 +437,46 @@ function ResultsContent() {
             </header>
 
             <main className="max-w-[1600px] mx-auto px-6 py-8">
+
+                {/* XLSX Module Tab Navigator */}
+                {isXLSX && xlsxSheets.length > 1 && (
+                    <div className="mb-6 bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+                        <div className="px-4 py-3 border-b border-stone-100 bg-stone-50/50 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+                            </svg>
+                            <span className="text-sm font-semibold text-stone-700">Modules ({xlsxSheets.length})</span>
+                            {analyzing && <span className="text-xs text-indigo-500 ml-2 animate-pulse">Analyzing current module...</span>}
+                        </div>
+                        <div className="flex gap-0 overflow-x-auto">
+                            {xlsxSheets.map((sheet, i) => {
+                                const isDone = !!sheetAnalyzed[i] || (i === activeSheetIdx && analyzed);
+                                return (
+                                    <button
+                                        key={sheet.sheetName}
+                                        onClick={() => switchSheet(i)}
+                                        disabled={analyzing}
+                                        className={`flex-shrink-0 px-5 py-3 text-sm font-medium transition-all border-b-2 flex items-center gap-2 ${i === activeSheetIdx
+                                                ? 'border-indigo-600 text-indigo-700 bg-indigo-50'
+                                                : 'border-transparent text-stone-500 hover:text-stone-700 hover:bg-stone-50 disabled:opacity-50'
+                                            }`}
+                                    >
+                                        {isDone ? (
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                            </svg>
+                                        ) : (
+                                            <span className="w-3.5 h-3.5 rounded-full border-2 border-stone-300 inline-block" />
+                                        )}
+                                        {sheet.sheetName}
+                                        <span className="text-xs text-stone-400">({sheet.parseResult.rows.length})</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 {/* Stats Bar */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
                     <StatCard label="Total Cases" value={totalRows} color="zinc" />

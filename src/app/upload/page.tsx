@@ -9,7 +9,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import FileUploader from '@/components/FileUploader';
 import CSVPreviewTable from '@/components/CSVPreviewTable';
 import ProjectSelector from '@/components/ProjectSelector';
-import type { CSVParseResult } from '@/types';
+import type { CSVParseResult, XLSXParseResult } from '@/types';
 
 export default function UploadPage() {
     return (
@@ -20,28 +20,38 @@ export default function UploadPage() {
 }
 
 function UploadContent() {
-    const { user, signOut, isAdmin } = useAuth();
+    const { user, isAdmin } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
     const defaultProjectId = searchParams.get('projectId');
 
+    // File state
     const [parseResult, setParseResult] = useState<CSVParseResult | null>(null);
-    const [hasFile, setHasFile] = useState(false);
+    const [xlsxResult, setXlsxResult] = useState<XLSXParseResult | null>(null);
+    const [activeSheetIndex, setActiveSheetIndex] = useState(0);
+
+    const hasFile = !!(parseResult || xlsxResult);
+    const uploadedFileName = parseResult ? 'Parsed CSV' : xlsxResult?.fileName || '';
+
+    // Project state
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(defaultProjectId);
     const [selectedProjectName, setSelectedProjectName] = useState<string>('');
     const [guidelinesOpen, setGuidelinesOpen] = useState(false);
 
-    // Update selected ID if param changes (e.g. navigation)
     useEffect(() => {
         if (defaultProjectId) setSelectedProjectId(defaultProjectId);
     }, [defaultProjectId]);
 
-    const [uploadedFileName, setUploadedFileName] = useState<string>('');
-
     const handleParsed = useCallback((result: CSVParseResult, fileName: string) => {
         setParseResult(result);
-        setHasFile(true);
-        setUploadedFileName(fileName);
+        setXlsxResult(null);
+        setActiveSheetIndex(0);
+    }, []);
+
+    const handleXLSXParsed = useCallback((result: XLSXParseResult) => {
+        setXlsxResult(result);
+        setParseResult(null);
+        setActiveSheetIndex(0);
     }, []);
 
     const handleProjectSelect = useCallback((projectId: string, projectName: string) => {
@@ -55,25 +65,34 @@ function UploadContent() {
             return;
         }
 
-        console.log('Proceeding with:', { parseResult, selectedProjectId, uploadedFileName });
-        if (parseResult && parseResult.rows.length > 0) {
-            sessionStorage.setItem(
-                'qa-validator-data',
-                JSON.stringify(parseResult.rows)
-            );
-            sessionStorage.setItem(
-                'qa-validator-meta',
-                JSON.stringify({
-                    projectId: selectedProjectId,
-                    projectName: selectedProjectName || 'Legacy / Default',
-                    fileName: uploadedFileName || `upload_${Date.now()}.csv`,
-                })
-            );
-            // Set flag for auto-run on Results page
+        if (xlsxResult) {
+            // Multi-sheet XLSX flow
+            const validSheets = xlsxResult.sheets.filter(s => s.parseResult.rows.length > 0);
+            if (validSheets.length === 0) {
+                alert('No valid test cases found in the XLSX file.');
+                return;
+            }
+            sessionStorage.setItem('qa-validator-xlsx-sheets', JSON.stringify(validSheets));
+            sessionStorage.setItem('qa-file-type', 'xlsx');
+            sessionStorage.setItem('qa-validator-meta', JSON.stringify({
+                projectId: selectedProjectId,
+                projectName: selectedProjectName || 'Legacy / Default',
+                fileName: xlsxResult.fileName,
+            }));
             sessionStorage.setItem('qa-auto-run', 'true');
-            // Clear saved flag so Results page knows to save this new file
             sessionStorage.removeItem('qa-file-saved');
-
+            router.push('/results?autoRun=true');
+        } else if (parseResult && parseResult.rows.length > 0) {
+            // Single CSV flow (unchanged)
+            sessionStorage.setItem('qa-validator-data', JSON.stringify(parseResult.rows));
+            sessionStorage.setItem('qa-file-type', 'csv');
+            sessionStorage.setItem('qa-validator-meta', JSON.stringify({
+                projectId: selectedProjectId,
+                projectName: selectedProjectName || 'Legacy / Default',
+                fileName: uploadedFileName || `upload_${Date.now()}.csv`,
+            }));
+            sessionStorage.setItem('qa-auto-run', 'true');
+            sessionStorage.removeItem('qa-file-saved');
             router.push('/results?autoRun=true');
         }
     };
@@ -92,9 +111,22 @@ function UploadContent() {
         URL.revokeObjectURL(url);
     };
 
+    // Compute active preview
+    const activePreview = xlsxResult
+        ? xlsxResult.sheets[activeSheetIndex]?.parseResult
+        : parseResult;
+
+    const totalRows = xlsxResult
+        ? xlsxResult.sheets.reduce((sum, s) => sum + s.parseResult.rows.length, 0)
+        : (parseResult?.rows.length || 0);
+
+    const hasErrors = xlsxResult
+        ? xlsxResult.sheets.some(s => s.parseResult.errors.length > 0)
+        : (parseResult?.errors?.length ?? 0) > 0;
+
     return (
         <div className="min-h-screen bg-stone-50 pb-20">
-            {/* Simple Header */}
+            {/* Header */}
             <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
                 <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -114,7 +146,7 @@ function UploadContent() {
                             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
                             </svg>
-                            Template
+                            CSV Template
                         </button>
                         <div className="w-px h-6 bg-stone-200" />
                         <button onClick={() => router.push('/')} className="text-sm font-medium text-stone-500 hover:text-stone-800 transition-colors">
@@ -129,7 +161,7 @@ function UploadContent() {
 
                 {/* Upload Card */}
                 <div className="bg-white rounded-2xl shadow-xl shadow-stone-200/50 border border-stone-200 overflow-hidden ring-1 ring-stone-900/5">
-                    {/* Project Selector (Top Bar) */}
+                    {/* Project Selector */}
                     <div className="px-8 py-6 border-b border-stone-100 bg-stone-50/50 flex flex-col md:flex-row md:items-center gap-4">
                         <div className="flex-1">
                             <ProjectSelector
@@ -142,11 +174,11 @@ function UploadContent() {
                         <div className="flex items-center gap-6 text-xs text-stone-500 font-medium">
                             <span className="flex items-center gap-1.5">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                Required Columns: Test Case ID, Description, Priority
+                                Required: ID, Description, Priority
                             </span>
                             <span className="flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                                Max Size: 5MB
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                XLSX: Each sheet = one module
                             </span>
                         </div>
                     </div>
@@ -155,11 +187,12 @@ function UploadContent() {
                     <div className="p-8 md:p-12">
                         <FileUploader
                             onParsed={handleParsed}
-                            compact={!!parseResult}
+                            onXLSXParsed={handleXLSXParsed}
+                            compact={!!hasFile}
                         />
 
                         {/* Guidelines Accordion */}
-                        {!parseResult && (
+                        {!hasFile && (
                             <div className="mt-8 pt-8 border-t border-stone-100">
                                 <button
                                     onClick={() => setGuidelinesOpen(!guidelinesOpen)}
@@ -176,7 +209,7 @@ function UploadContent() {
                                         <div className="space-y-4">
                                             <h4 className="font-semibold text-stone-800 flex items-center gap-2">
                                                 <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs">1</span>
-                                                Mandatory Columns
+                                                Mandatory Columns (per sheet)
                                             </h4>
                                             <ul className="space-y-2 pl-8 text-stone-600 list-disc marker:text-stone-300">
                                                 <li><span className="font-mono text-xs bg-stone-100 px-1 py-0.5 rounded">Test Case ID</span> — Unique ID (e.g., TC001)</li>
@@ -188,13 +221,13 @@ function UploadContent() {
                                         <div className="space-y-4">
                                             <h4 className="font-semibold text-stone-800 flex items-center gap-2">
                                                 <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs">2</span>
-                                                AI Quality Tips
+                                                XLSX Multi-Sheet Tips
                                             </h4>
                                             <ul className="space-y-2 pl-8 text-stone-600 list-disc marker:text-stone-300">
-                                                <li>Use strict action verbs (Verify, Check, Validate)</li>
-                                                <li>Avoid vague results like "It works"</li>
-                                                <li>Include precise error messages in expected results</li>
-                                                <li>Keep rows under 500 for optimal performance</li>
+                                                <li>Each sheet name becomes the module name</li>
+                                                <li>Each sheet is reviewed and saved separately</li>
+                                                <li>Navigate between modules in results view</li>
+                                                <li>Max 500 rows per sheet</li>
                                             </ul>
                                         </div>
                                     </div>
@@ -205,27 +238,85 @@ function UploadContent() {
                 </div>
 
                 {/* Preview Section */}
-                {parseResult && (
+                {hasFile && activePreview && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="bg-white rounded-2xl shadow-lg border border-stone-200 overflow-hidden p-6 md:p-8">
-                            <div className="flex items-center justify-between mb-6">
-                                <div>
-                                    <h3 className="text-lg font-bold text-stone-800">File Preview</h3>
-                                    <p className="text-stone-500 text-sm">{parseResult.rows.length} rows found • {parseResult.errors.length} errors</p>
+                        <div className="bg-white rounded-2xl shadow-lg border border-stone-200 overflow-hidden">
+
+                            {/* Header row with sheet tabs (XLSX) or title (CSV) */}
+                            <div className="p-6 md:p-8 pb-0">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div>
+                                        <h3 className="text-lg font-bold text-stone-800">File Preview</h3>
+                                        {xlsxResult ? (
+                                            <p className="text-stone-500 text-sm">
+                                                {xlsxResult.sheets.length} sheet{xlsxResult.sheets.length !== 1 ? 's' : ''} · {totalRows} total rows
+                                            </p>
+                                        ) : (
+                                            <p className="text-stone-500 text-sm">
+                                                {activePreview.rows.length} rows · {activePreview.errors.length} errors
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Proceed Button */}
+                                    {totalRows > 0 && !hasErrors && (
+                                        <button
+                                            onClick={handleProceed}
+                                            className="px-6 py-2.5 rounded-xl font-semibold text-sm bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center gap-2"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456Z" />
+                                            </svg>
+                                            {xlsxResult
+                                                ? `Run AI Review (${xlsxResult.sheets.length} modules)`
+                                                : 'Run AI Review'
+                                            }
+                                        </button>
+                                    )}
                                 </div>
-                                {parseResult.rows.length > 0 && parseResult.errors.length === 0 && (
-                                    <button
-                                        onClick={handleProceed}
-                                        className="px-6 py-2.5 rounded-xl font-semibold text-sm bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center gap-2"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456Z" />
-                                        </svg>
-                                        Run AI Review
-                                    </button>
+
+                                {/* Sheet Tab Navigator (XLSX only) */}
+                                {xlsxResult && xlsxResult.sheets.length > 1 && (
+                                    <div className="flex gap-1 overflow-x-auto pb-2 border-b border-stone-100">
+                                        {xlsxResult.sheets.map((sheet, i) => {
+                                            const hasErr = sheet.parseResult.errors.length > 0;
+                                            return (
+                                                <button
+                                                    key={sheet.sheetName}
+                                                    onClick={() => setActiveSheetIndex(i)}
+                                                    className={`shrink-0 px-4 py-2 text-sm font-medium rounded-t-lg transition-all flex items-center gap-2 ${i === activeSheetIndex
+                                                            ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600'
+                                                            : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'
+                                                        }`}
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
+                                                    </svg>
+                                                    {sheet.sheetName}
+                                                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${hasErr ? 'bg-red-100 text-red-600' : 'bg-stone-100 text-stone-500'}`}>
+                                                        {hasErr ? '!' : sheet.parseResult.rows.length}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 )}
                             </div>
-                            <CSVPreviewTable result={parseResult} />
+
+                            {/* Active sheet preview table */}
+                            <div className="p-6 md:p-8 pt-4">
+                                {activePreview.errors.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {activePreview.errors.map((err, i) => (
+                                            <div key={i} className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+                                                {err}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <CSVPreviewTable result={activePreview} />
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}

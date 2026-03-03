@@ -2,17 +2,19 @@
 
 import { useCallback, useState, useRef } from 'react';
 import { parseCSV } from '@/lib/csv-parser';
-import type { CSVParseResult } from '@/types';
+import { parseXLSX } from '@/lib/xlsx-parser';
+import type { CSVParseResult, XLSXParseResult } from '@/types';
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (xlsx can be larger)
 
 interface FileUploaderProps {
     onParsed: (result: CSVParseResult, fileName: string) => void;
+    onXLSXParsed?: (result: XLSXParseResult) => void;
     disabled?: boolean;
     compact?: boolean;
 }
 
-export default function FileUploader({ onParsed, disabled, compact = false }: FileUploaderProps) {
+export default function FileUploader({ onParsed, onXLSXParsed, disabled, compact = false }: FileUploaderProps) {
     const [dragActive, setDragActive] = useState(false);
     const [fileName, setFileName] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -24,15 +26,16 @@ export default function FileUploader({ onParsed, disabled, compact = false }: Fi
             setError(null);
             setFileName(null);
 
-            // Validate file type
-            if (!file.name.toLowerCase().endsWith('.csv')) {
-                setError('Invalid file type. Please upload a .csv file.');
+            const isCSV = file.name.toLowerCase().endsWith('.csv');
+            const isXLSX = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
+
+            if (!isCSV && !isXLSX) {
+                setError('Invalid file type. Please upload a .csv or .xlsx file.');
                 return;
             }
 
-            // Validate file size
             if (file.size > MAX_FILE_SIZE) {
-                setError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 5MB.`);
+                setError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 10MB.`);
                 return;
             }
 
@@ -40,15 +43,24 @@ export default function FileUploader({ onParsed, disabled, compact = false }: Fi
             setParsing(true);
 
             try {
-                const result = await parseCSV(file);
-                onParsed(result, file.name);
+                if (isXLSX) {
+                    if (!onXLSXParsed) {
+                        setError('XLSX upload is not supported on this page.');
+                        return;
+                    }
+                    const result = await parseXLSX(file);
+                    onXLSXParsed(result);
+                } else {
+                    const result = await parseCSV(file);
+                    onParsed(result, file.name);
+                }
             } catch (err) {
-                setError(`Failed to parse CSV: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                setError(`Failed to parse file: ${err instanceof Error ? err.message : 'Unknown error'}`);
             } finally {
                 setParsing(false);
             }
         },
-        [onParsed]
+        [onParsed, onXLSXParsed]
     );
 
     const handleDrop = useCallback(
@@ -106,7 +118,7 @@ export default function FileUploader({ onParsed, disabled, compact = false }: Fi
                 <input
                     ref={inputRef}
                     type="file"
-                    accept=".csv"
+                    accept=".csv,.xlsx,.xls"
                     onChange={handleChange}
                     className="hidden"
                     disabled={disabled}
@@ -146,11 +158,33 @@ export default function FileUploader({ onParsed, disabled, compact = false }: Fi
                             <>
                                 <div>
                                     <p className={`text-stone-700 font-medium ${compact ? 'text-base' : 'text-lg'}`}>
-                                        {dragActive ? 'Drop your CSV here' : (compact ? 'Upload a different file' : 'Drag & drop your CSV file')}
+                                        {dragActive
+                                            ? 'Drop your file here'
+                                            : compact
+                                                ? 'Upload a different file'
+                                                : 'Drag & drop your file'}
                                     </p>
                                     <p className="text-stone-400 text-sm mt-1">
-                                        {compact ? '.csv only • 5MB max' : 'or click to browse • .csv only • 5MB max • 500 rows max'}
+                                        {compact
+                                            ? '.csv or .xlsx • 10MB max'
+                                            : 'or click to browse • .csv or .xlsx • 10MB max • 500 rows per sheet'}
                                     </p>
+                                    {!compact && (
+                                        <div className="flex items-center justify-center gap-3 mt-3">
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-100 text-xs font-medium text-emerald-700">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                                </svg>
+                                                CSV — Single module
+                                            </span>
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-xs font-medium text-indigo-700">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+                                                </svg>
+                                                XLSX — Multi-sheet modules
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                                 {fileName && !error && (
                                     <div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200">
