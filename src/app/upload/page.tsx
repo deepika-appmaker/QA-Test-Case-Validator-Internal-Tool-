@@ -10,6 +10,7 @@ import FileUploader from '@/components/FileUploader';
 import CSVPreviewTable from '@/components/CSVPreviewTable';
 import ProjectSelector from '@/components/ProjectSelector';
 import type { CSVParseResult, XLSXParseResult } from '@/types';
+import { parseCSVFromRows } from '@/lib/csv-parser';
 
 export default function UploadPage() {
     return (
@@ -53,6 +54,40 @@ function UploadContent() {
         setParseResult(null);
         setActiveSheetIndex(0);
     }, []);
+
+    // Rename a column header and re-parse with the updated mapping
+    const handleRenameHeader = useCallback((oldName: string, newName: string) => {
+        if (parseResult) {
+            const updatedHeaders = parseResult.rawHeaders.map(h => h === oldName ? newName : h);
+            const updatedRows = parseResult.rawRows.map(row => {
+                const newRow = { ...row };
+                if (Object.prototype.hasOwnProperty.call(newRow, oldName)) {
+                    newRow[newName] = newRow[oldName];
+                    delete newRow[oldName];
+                }
+                return newRow;
+            });
+            const reParsed = parseCSVFromRows(updatedHeaders, updatedRows);
+            setParseResult(reParsed);
+        } else if (xlsxResult) {
+            const updatedSheets = xlsxResult.sheets.map((sheet, i) => {
+                if (i !== activeSheetIndex) return sheet;
+                const pr = sheet.parseResult;
+                const updatedHeaders = pr.rawHeaders.map(h => h === oldName ? newName : h);
+                const updatedRows = pr.rawRows.map(row => {
+                    const newRow = { ...row };
+                    if (Object.prototype.hasOwnProperty.call(newRow, oldName)) {
+                        newRow[newName] = newRow[oldName];
+                        delete newRow[oldName];
+                    }
+                    return newRow;
+                });
+                const reParsed = parseCSVFromRows(updatedHeaders, updatedRows);
+                return { ...sheet, parseResult: reParsed };
+            });
+            setXlsxResult({ ...xlsxResult, sheets: updatedSheets });
+        }
+    }, [parseResult, xlsxResult, activeSheetIndex]);
 
     const handleProjectSelect = useCallback((projectId: string, projectName: string) => {
         setSelectedProjectId(projectId);
@@ -285,8 +320,8 @@ function UploadContent() {
                                                     key={sheet.sheetName}
                                                     onClick={() => setActiveSheetIndex(i)}
                                                     className={`shrink-0 px-4 py-2 text-sm font-medium rounded-t-lg transition-all flex items-center gap-2 ${i === activeSheetIndex
-                                                            ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600'
-                                                            : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'
+                                                        ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600'
+                                                        : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'
                                                         }`}
                                                 >
                                                     <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -314,7 +349,7 @@ function UploadContent() {
                                         ))}
                                     </div>
                                 ) : (
-                                    <CSVPreviewTable result={activePreview} />
+                                    <CSVPreviewTable result={activePreview} onRenameHeader={handleRenameHeader} />
                                 )}
                             </div>
                         </div>
