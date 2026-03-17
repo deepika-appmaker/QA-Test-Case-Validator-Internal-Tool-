@@ -53,6 +53,8 @@ Each vague word used without defining outcome → −5 each
 Vague words:
 correctly, properly, smoothly, fine, appropriate, normal, works, successful
 
+When penalizing for vague words, you MUST suggest a specific observable alternative in your reason (e.g., "Instead of 'works', specify 'navigates to dashboard'").
+
 Do not double-penalize if already marked “entirely generic”.
 
 4️⃣ Coverage Awareness (Context-Based)
@@ -168,7 +170,7 @@ Return JSON only:
 {
 "score": number,
 "status": "PASS | NEEDS IMPROVEMENT | REWRITE REQUIRED",
-"reason": "Brief summary of major issues only.",
+"reason": "Brief summary of major issues only. If vague words are found, suggest an alternative (e.g. 'instead of \"properly\" use \"displays success message\"').",
 "mandatory_feedback": "Clear corrective instruction. If priority misalignment exists, suggest corrected priority."
 }
 

@@ -105,18 +105,6 @@ export interface CSVParseResult {
   cellIssues: CellIssue[];
 }
 
-// ─── XLSX Multi-Sheet Types ──────────────────────────────────────
-
-export interface SheetParseResult {
-  sheetName: string;       // Name of the Excel sheet (becomes module name)
-  parseResult: CSVParseResult;
-}
-
-export interface XLSXParseResult {
-  sheets: SheetParseResult[];
-  fileName: string;
-}
-
 // ─── Rate Limit Types ────────────────────────────────────────────
 
 export interface RateLimitCheck {

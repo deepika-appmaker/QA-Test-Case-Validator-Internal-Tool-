@@ -18,6 +18,7 @@ const REWRITE_DELAY_MS = 2000; // 2s between rewrite calls
  */
 export async function POST(request: NextRequest) {
     try {
+        console.log('Received POST /api/analyze request');
         if (!AI_API_KEY) {
             return NextResponse.json(
                 { error: 'AI API key not configured. Please set AI_API_KEY in environment variables.' },

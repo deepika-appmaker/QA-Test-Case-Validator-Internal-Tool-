@@ -328,7 +328,7 @@ function TableRow({
                             {/* Full AI Comment */}
                             {testCase.comment && (
                                 <div className="p-3 rounded-lg bg-white border border-stone-200">
-                                    <p className="text-xs text-stone-500 font-medium mb-1">AI Review Comment</p>
+                                    <p className="text-xs text-stone-500 font-medium mb-1">Comment</p>
                                     <p className="text-xs text-stone-700 leading-relaxed whitespace-pre-wrap">{testCase.comment}</p>
                                     {/* Confidence hidden */}
                                 </div>

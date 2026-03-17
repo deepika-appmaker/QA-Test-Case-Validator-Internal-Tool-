@@ -17,13 +17,6 @@ export async function signInWithGoogle(): Promise<User> {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
 
-    // Optional domain restriction
-    const allowedDomain = process.env.NEXT_PUBLIC_ALLOWED_DOMAIN;
-    if (allowedDomain && user.email && !user.email.endsWith(`@${allowedDomain}`)) {
-        await firebaseSignOut(auth);
-        throw new Error(`Access restricted to @${allowedDomain} email addresses.`);
-    }
-
     return user;
 }
 
