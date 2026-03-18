@@ -118,11 +118,10 @@ function ResultsContent() {
 
             const cases = await getTestCasesByFile(id);
             setTestCases(cases);
-            setAnalyzed(cases.some(c => c.aiStatus !== 'PENDING'));
-            // If already analyzed (all have results), we consider it done
-            if (cases.length > 0 && cases.every(c => c.aiStatus === 'PASS' || c.aiStatus === 'NEEDS_REWRITE')) {
-                setAnalyzed(true);
-            }
+            
+            // Only consider analyzed if we have finalized states (prevents false positives on empty/pending)
+            const hasResults = cases.some(c => c.aiStatus === 'PASS' || c.aiStatus === 'NEEDS_REWRITE' || c.aiStatus === 'ERROR');
+            setAnalyzed(hasResults);
         } catch (error) {
             console.error('Failed to load history:', error);
             showToast('Failed to load file history', 'error');
@@ -241,11 +240,18 @@ function ResultsContent() {
 
             try {
                 console.log(`Sending batch ${b + 1}/${batches.length} to API`, batch);
+                
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 35000); // 35s timeout
+
                 const response = await fetch('/api/analyze', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ testCases: batch }),
+                    signal: controller.signal
                 });
+                
+                clearTimeout(timeoutId);
 
                 if (!response.ok) {
                     const errorText = await response.text();

@@ -48,6 +48,9 @@ export default function RootLayout({
               Verification icons created by Anggara - Flaticon
             </a>
           </p>
+          <p className="mt-2 text-stone-400/80">
+            Last published: March 18, 2026
+          </p>
         </footer>
       </body>
     </html>
