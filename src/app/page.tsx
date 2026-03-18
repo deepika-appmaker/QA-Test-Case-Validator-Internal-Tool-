@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
-import { getProjects, createProject, getOrCreateDefaultProject } from '@/lib/firestore-projects';
+import { getProjects, createProject, getOrCreateDefaultProject, deleteProject } from '@/lib/firestore-projects';
 import { getAllFiles } from '@/lib/firestore';
 import type { ProjectFolder } from '@/types';
 
@@ -77,6 +77,18 @@ export default function Dashboard() {
       console.error('Failed to create project:', error);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDeleteProject = async (e: React.MouseEvent, targetProjectId: string) => {
+    e.stopPropagation(); // Prevent opening the project
+    if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) return;
+    try {
+      await deleteProject(targetProjectId);
+      setProjects((prev) => prev.filter((p) => p.projectId !== targetProjectId));
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      alert('Failed to delete project. Please try again.');
     }
   };
 
@@ -281,6 +293,17 @@ export default function Dashboard() {
                           </svg>
                         </div>
                         <div className="flex flex-col items-end gap-1">
+                          {isAdmin && project.projectId !== 'default' && (
+                            <button
+                              onClick={(e) => handleDeleteProject(e, project.projectId)}
+                              className="p-1 mb-1 rounded-md text-stone-400 hover:text-red-500 hover:bg-red-50 transition-all focus:outline-none focus:ring-2 focus:ring-red-200"
+                              title="Delete Project"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                              </svg>
+                            </button>
+                          )}
                           {score > 0 && (
                             <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${accentText}`}>
                               {score}% Avg
@@ -333,8 +356,19 @@ export default function Dashboard() {
                       <div className="col-span-2 text-sm text-stone-500 text-right">
                         {count} file{count !== 1 ? 's' : ''}
                       </div>
-                      <div className="col-span-2 text-xs text-stone-400 text-right">
-                        {new Date(project.updatedAt || project.createdAt).toLocaleDateString()}
+                      <div className="col-span-2 text-xs text-stone-400 flex items-center justify-end gap-2 pr-2">
+                        <span>{new Date(project.updatedAt || project.createdAt).toLocaleDateString()}</span>
+                        {isAdmin && project.projectId !== 'default' && (
+                          <button
+                            onClick={(e) => handleDeleteProject(e, project.projectId)}
+                            className="p-1 rounded-md text-stone-300 hover:text-red-500 hover:bg-red-50 transition-all focus:outline-none"
+                            title="Delete Project"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

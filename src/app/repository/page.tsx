@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { getProjects } from '@/lib/firestore-projects';
-import { getFilesByProject, getAllFiles, getFilesByUser } from '@/lib/firestore';
+import { getFilesByProject, getAllFiles, getFilesByUser, deleteFile } from '@/lib/firestore';
 import type { ProjectFolder, FileRecord } from '@/types';
 
 export default function RepositoryPage() {
@@ -54,6 +54,17 @@ function RepositoryContent() {
 
     const handleViewResults = (fileId: string) => {
         router.push(`/results?fileId=${fileId}`);
+    };
+
+    const handleDeleteFile = async (fileId: string, fileName: string) => {
+        if (!confirm(`Are you sure you want to delete "${fileName}"? This cannot be undone.`)) return;
+        try {
+            await deleteFile(fileId);
+            setFiles(prev => prev.filter(f => f.fileId !== fileId));
+        } catch (err) {
+            console.error('Failed to delete file:', err);
+            alert('Failed to delete file.');
+        }
     };
 
     return (
@@ -240,12 +251,23 @@ function RepositoryContent() {
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
-                                                    <button
-                                                        onClick={() => handleViewResults(file.fileId)}
-                                                        className="text-xs font-medium text-indigo-600 hover:text-indigo-700 px-2 py-1 rounded-md hover:bg-indigo-50 transition-all"
-                                                    >
-                                                        View
-                                                    </button>
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        {isAdmin && (
+                                                            <button
+                                                                onClick={() => handleDeleteFile(file.fileId, file.fileName)}
+                                                                className="text-xs font-medium text-stone-400 hover:text-red-600 px-2 py-1 rounded-md hover:bg-red-50 transition-all focus:outline-none"
+                                                                title="Delete File"
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => handleViewResults(file.fileId)}
+                                                            className="text-xs font-medium text-indigo-600 hover:text-indigo-700 px-2 py-1 rounded-md hover:bg-indigo-50 transition-all"
+                                                        >
+                                                            View
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );
