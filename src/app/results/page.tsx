@@ -275,7 +275,7 @@ function ResultsContent() {
                         ...tc,
                         aiStatus: result.status === 'PASS' ? 'PASS' : 'NEEDS_REWRITE',
                         score: result.score,
-                        comment: result.reason,
+                        comment: result.mandatory_feedback ? `${result.reason}\n\nSuggestion: ${result.mandatory_feedback}` : result.reason,
                         confidence: result.confidence,
                         rewrittenDescription: rewrite?.rewrittenDescription,
                         rewrittenExpected: rewrite?.rewrittenExpected,

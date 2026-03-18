@@ -27,6 +27,7 @@ export interface AIReviewResult {
   score: number;
   reason: string;
   confidence: number;
+  mandatory_feedback?: string;
 }
 
 export interface AIRewriteResult {
