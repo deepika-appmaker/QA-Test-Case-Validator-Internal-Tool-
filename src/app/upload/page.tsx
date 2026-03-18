@@ -28,7 +28,7 @@ function UploadContent() {
 
     // File state
     const [parseResult, setParseResult] = useState<CSVParseResult | null>(null);
-    const uploadedFileName = parseResult ? 'Parsed CSV' : '';
+    const [uploadedFileName, setUploadedFileName] = useState<string>('');
 
     // Project state
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(defaultProjectId);
@@ -41,6 +41,7 @@ function UploadContent() {
 
     const handleParsed = useCallback((result: CSVParseResult, fileName: string) => {
         setParseResult(result);
+        setUploadedFileName(fileName);
     }, []);
 
     // Rename a column header and re-parse with the updated mapping
