@@ -49,7 +49,7 @@ export default function RootLayout({
             </a>
           </p>
           <p className="mt-2 text-stone-400/80">
-            Last updated on: March 18, 2026 at 2:59 PM IST
+            Last updated on: March 18, 2026 at 3:53 PM IST
           </p>
         </footer>
       </body>

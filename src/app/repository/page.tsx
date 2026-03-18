@@ -252,15 +252,13 @@ function RepositoryContent() {
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
                                                     <div className="flex items-center justify-end gap-2">
-                                                        {isAdmin && (
-                                                            <button
-                                                                onClick={() => handleDeleteFile(file.fileId, file.fileName)}
-                                                                className="text-xs font-medium text-stone-400 hover:text-red-600 px-2 py-1 rounded-md hover:bg-red-50 transition-all focus:outline-none"
-                                                                title="Delete File"
-                                                            >
-                                                                Delete
-                                                            </button>
-                                                        )}
+                                                        <button
+                                                            onClick={() => handleDeleteFile(file.fileId, file.fileName)}
+                                                            className="text-xs font-medium text-stone-400 hover:text-red-600 px-2 py-1 rounded-md hover:bg-red-50 transition-all focus:outline-none"
+                                                            title="Delete File"
+                                                        >
+                                                            Delete
+                                                        </button>
                                                         <button
                                                             onClick={() => handleViewResults(file.fileId)}
                                                             className="text-xs font-medium text-indigo-600 hover:text-indigo-700 px-2 py-1 rounded-md hover:bg-indigo-50 transition-all"

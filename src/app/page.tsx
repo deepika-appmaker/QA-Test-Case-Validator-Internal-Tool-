@@ -293,7 +293,7 @@ export default function Dashboard() {
                           </svg>
                         </div>
                         <div className="flex flex-col items-end gap-1">
-                          {isAdmin && project.projectId !== 'default' && (
+                          {project.projectId !== 'default' && (
                             <button
                               onClick={(e) => handleDeleteProject(e, project.projectId)}
                               className="p-1 mb-1 rounded-md text-stone-400 hover:text-red-500 hover:bg-red-50 transition-all focus:outline-none focus:ring-2 focus:ring-red-200"
@@ -358,7 +358,7 @@ export default function Dashboard() {
                       </div>
                       <div className="col-span-2 text-xs text-stone-400 flex items-center justify-end gap-2 pr-2">
                         <span>{new Date(project.updatedAt || project.createdAt).toLocaleDateString()}</span>
-                        {isAdmin && project.projectId !== 'default' && (
+                        {project.projectId !== 'default' && (
                           <button
                             onClick={(e) => handleDeleteProject(e, project.projectId)}
                             className="p-1 rounded-md text-stone-300 hover:text-red-500 hover:bg-red-50 transition-all focus:outline-none"
