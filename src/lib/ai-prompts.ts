@@ -165,14 +165,18 @@ Score < 60 → REWRITE REQUIRED
 
 OUTPUT FORMAT
 
-Return JSON only:
+Return JSON array only, containing one object per test case:
 
-{
-"score": number,
-"status": "PASS | NEEDS IMPROVEMENT | REWRITE REQUIRED",
-"reason": "Brief summary of major issues only. If vague words are found, suggest an alternative (e.g. 'instead of \"properly\" use \"displays success message\"').",
-"mandatory_feedback": "Clear corrective instruction. If priority misalignment exists, suggest corrected priority."
-}
+[
+  {
+    "testId": "ID of the test case being evaluated",
+    "score": number,
+    "status": "PASS | NEEDS_REWRITE",
+    "reason": "Brief summary of major issues only. If vague words are found, suggest an alternative (e.g. 'instead of \"properly\" use \"displays success message\"').",
+    "confidence": number,
+    "mandatory_feedback": "Clear corrective instruction. If priority misalignment exists, suggest corrected priority."
+  }
+]
 
 Do not output explanations outside JSON.
 Do not list minor grammar suggestions.
