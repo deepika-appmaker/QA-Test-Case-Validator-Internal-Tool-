@@ -273,10 +273,18 @@ export default function Dashboard() {
             const count = fileCounts[project.projectId] || 0;
 
             return (
-              <button
+              <div
                 key={project.projectId}
+                role="button"
+                tabIndex={0}
                 onClick={() => router.push(`/project/${project.projectId}`)}
-                className={`group relative text-left bg-white rounded-2xl transition-all duration-300 overflow-hidden ${viewMode === 'grid'
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    router.push(`/project/${project.projectId}`);
+                  }
+                }}
+                className={`group relative text-left bg-white rounded-2xl transition-all duration-300 overflow-hidden focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${viewMode === 'grid'
                   ? "flex flex-col h-[280px] shadow-sm hover:shadow-xl hover:-translate-y-1"
                   : "flex flex-row items-center p-4 border border-stone-200 hover:border-indigo-300 hover:shadow-md"
                   }`}
@@ -373,7 +381,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
-              </button>
+              </div>
             );
           })}
 

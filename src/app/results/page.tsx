@@ -43,7 +43,7 @@ function ResultsContent() {
     const [analyzedCount, setAnalyzedCount] = useState(0);
     const [totalBatches, setTotalBatches] = useState(0);
     const [currentBatch, setCurrentBatch] = useState(0);
-    const BATCH_SIZE = 12;
+    const BATCH_SIZE = 8;
 
     // Load data from sessionStorage
     const [projectId, setProjectId] = useState<string>('default');
@@ -240,9 +240,8 @@ function ResultsContent() {
 
             try {
                 console.log(`Sending batch ${b + 1}/${batches.length} to API`, batch);
-                
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 35000); // 35s timeout
+                const timeoutId = setTimeout(() => controller.abort(new Error('Analysis request timed out after 55 seconds.')), 55000); // 55s timeout
 
                 const response = await fetch('/api/analyze', {
                     method: 'POST',
